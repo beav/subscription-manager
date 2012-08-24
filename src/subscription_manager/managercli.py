@@ -16,6 +16,7 @@
 #
 
 import os
+import pprint
 import sys
 import logging
 import socket
@@ -33,6 +34,7 @@ _ = gettext.gettext
 
 import rhsm.config
 import rhsm.connection as connection
+import rhsm.certificate as certificate
 
 from subscription_manager.i18n_optparse import OptionParser, WrappedIndentedHelpFormatter
 from subscription_manager.branding import get_branding
@@ -852,6 +854,8 @@ class RegisterCommand(UserPassCommand):
         super(RegisterCommand, self).__init__("register", shortdesc, True,
                                               ent_dir, prod_dir)
 
+        self.parser.add_option("--rhic", dest="rhic", action='store_true',
+                               help=_("Register using a RHIC"))
         self.parser.add_option("--type", dest="consumertype", default="system",
                                help=_("the type of consumer to register, defaults to system"))
         self.parser.add_option("--name", dest="consumername",
@@ -930,6 +934,40 @@ class RegisterCommand(UserPassCommand):
                 except Exception, e:
                     log.error("Unable to un-register consumer: %s" % old_uuid)
                     log.exception(e)
+
+        # if we are registering with a RHIC, do that here
+        # TODO:  command-line config overrides
+        if self.options.rhic:
+            splice_conn = connection.SpliceConnection()
+
+            self.facts = Facts(ent_dir=self.entitlement_dir,
+                                  prod_dir=self.product_dir)
+
+            iproducts = managerlib.getInstalledProductStatus(self.product_dir,
+                    self.entitlement_dir, self.facts.get_facts())
+
+            product_certs = []
+
+            for product in iproducts:
+                product_certs.append(product[1])
+
+            # read the rhic
+            rhic_filename = cfg.get('splice', 'rhic')
+            rhic_fd = open(rhic_filename)
+            rhic_str = rhic_fd.read()
+            rhic = certificate.Certificate(rhic_str)
+            
+
+            mac = self.facts.to_dict()['net.interface.eth0.mac_address']
+
+            params = {}
+            params['identity_cert'] = rhic_str
+            params['consumer_identifier'] = mac
+            params['products'] = product_certs
+
+            splice_conn.conn.request_put("/api/v1/entitlement/%s/" % rhic.subj['commonName'], params)
+            sys.exit(1)
+
 
         # Proceed with new registration:
         try:
@@ -1872,9 +1910,10 @@ class ListCommand(CliCommand):
         print("+-------------------------------------------+\n")
 
         for cert in certs:
+            # this needs to print differently for RHICs..
             order = cert.order
             print(self._none_wrap(_("Subscription Name:    \t%s"),
-                  order.name))
+                      order.name))
 
             prefix = _("Provides:             \t%s")
             for product in cert.products:
@@ -1884,22 +1923,22 @@ class ListCommand(CliCommand):
             if len(cert.products) == 0:
                 print(prefix % "")
 
-            print(self._none_wrap(_("SKU:                  \t%s"),
-                  order.sku))
-            print(self._none_wrap(_("Contract:             \t%s"),
-                  order.contract))
-            print(self._none_wrap(_("Account:              \t%s"),
-                  order.account))
+            #print(self._none_wrap(_("SKU:                  \t%s"),
+            #      order.sku))
+            #print(self._none_wrap(_("Contract:             \t%s"),
+            #      order.contract))
+            #print(self._none_wrap(_("Account:              \t%s"),
+            #      order.account))
             print(self._none_wrap(_("Serial Number:        \t%s"),
                   cert.serial))
             print(self._none_wrap(_("Active:               \t%s"),
                   cert.is_valid()))
-            print(self._none_wrap(_("Quantity Used:        \t%s"),
-                  order.quantity_used))
-            print(_("Service Level:        \t%s") %
-                  (order.service_level or ""))
-            print(_("Service Type:         \t%s") %
-                  (order.service_type or ""))
+            #print(self._none_wrap(_("Quantity Used:        \t%s"),
+            #      order.quantity_used))
+            #print(_("Service Level:        \t%s") %
+            #      (order.service_level or ""))
+            #print(_("Service Type:         \t%s") %
+            #      (order.service_type or ""))
             print(_("Starts:               \t%s") %
                   managerlib.formatDate(cert.valid_range.begin()))
             print(_("Ends:                 \t%s") %
