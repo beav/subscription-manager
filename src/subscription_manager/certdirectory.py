@@ -219,7 +219,7 @@ class EntitlementDirectory(CertificateDirectory):
 
     def listValid(self):
         valid = []
-        print "listing valid"
+        print "possibly valid certs: %s" % self.list()
         for c in self.list():
 
             # If something is amiss with the key for this certificate, consider

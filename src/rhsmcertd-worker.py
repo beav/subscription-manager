@@ -18,24 +18,78 @@ import sys
 sys.path.append("/usr/share/rhsm")
 
 import logging
+import os
 
 from rhsm import connection
+from rhsm import certificate
 from subscription_manager import certmgr
 from subscription_manager import logutil
 from subscription_manager import managerlib
 from subscription_manager.certlib import ConsumerIdentity
 from subscription_manager.i18n_optparse import OptionParser
+from subscription_manager.facts import Facts
+from subscription_manager.certdirectory import EntitlementDirectory, ProductDirectory
 
 import gettext
 _ = gettext.gettext
 
 
 def main(options, log):
+    if os.path.exists("/etc/pki/rhic/rhic.pem"):
+        print ("RHIC UPDATE")
+        splice_conn = connection.SpliceConnection()
+        entitlement_dir = EntitlementDirectory()
+        product_dir = ProductDirectory()
+
+        facts = Facts(ent_dir=entitlement_dir,
+                              prod_dir=product_dir)
+
+        iproducts = managerlib.getInstalledProductStatus(product_dir,
+                entitlement_dir, facts.get_facts())
+
+        product_certs = []
+
+        for product in iproducts:
+            product_certs.append(product[1])
+
+        # read the rhic, for sending up in json
+        rhic = certificate.RHICertificate()
+        #rhic.read(cfg.get('splice', 'rhic'))
+        rhic.read("/etc/pki/rhic/rhic.pem")
+
+        mac = facts.to_dict()['net.interface.eth0.mac_address']
+
+        params = {}
+        params['identity_cert'] = rhic.toPEM()
+        params['consumer_identifier'] = mac
+        params['products'] = product_certs
+        params['system_facts'] = facts.to_dict()
+
+        response = splice_conn.conn.request_put("/api/v1/entitlement/%s/" % rhic.subj['commonName'], params)
+        print response
+
+        cert = response['certs'][0][0]
+        key = response['certs'][0][1]
+        serial = response['certs'][0][2]
+
+        
+        try:
+            cert_fd = open("/etc/pki/entitlement/%s.pem" % serial, "wb")
+            cert_fd.write(cert)
+            cert_fd.close()
+            key_fd = open("/etc/pki/entitlement/%s-key.pem" % serial, "wb")
+            key_fd.write(key)
+            key_fd.close()
+        except:
+            raise
+        sys.exit(1)
+
     if not ConsumerIdentity.existsAndValid():
         log.error('Either the consumer is not registered or the certificates' +
                   ' are corrupted. Certificate update using daemon failed.')
         sys.exit(-1)
     print _('Updating entitlement certificates & repositories')
+
 
     try:
         uep = connection.UEPConnection(cert_file=ConsumerIdentity.certpath(),

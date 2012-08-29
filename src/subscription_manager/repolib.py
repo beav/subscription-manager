@@ -42,6 +42,7 @@ class RepoLib(DataLib):
         return action.perform()
 
     def get_repos(self):
+        print "get_repos"
         current = set()
         action = UpdateAction(uep=self.uep)
         repos = action.get_unique_content()

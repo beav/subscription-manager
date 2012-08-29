@@ -951,19 +951,17 @@ class RegisterCommand(UserPassCommand):
             for product in iproducts:
                 product_certs.append(product[1])
 
-            # read the rhic
-            rhic_filename = cfg.get('splice', 'rhic')
-            rhic_fd = open(rhic_filename)
-            rhic_str = rhic_fd.read()
-            rhic = certificate.Certificate(rhic_str)
-            
+            # read the rhic, for sending up in json
+            rhic = certificate.RHICertificate()
+            rhic.read(cfg.get('splice', 'rhic'))
 
             mac = self.facts.to_dict()['net.interface.eth0.mac_address']
 
             params = {}
-            params['identity_cert'] = rhic_str
+            params['identity_cert'] = rhic.toPEM()
             params['consumer_identifier'] = mac
             params['products'] = product_certs
+            params['facts'] = self.facts.to_dict()
 
             splice_conn.conn.request_put("/api/v1/entitlement/%s/" % rhic.subj['commonName'], params)
             sys.exit(1)
