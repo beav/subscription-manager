@@ -46,15 +46,22 @@ class ProductDatabase:
         self.create()
 
     def add(self, product, repo):
-        self.content[product] = repo
+        if self.content[product]:
+            self.content[product].append(repo)
+        else:
+            self.content[product] = [repo]
 
-    def delete(self, product):
+    def delete(self, product, repo=None):
         try:
-            del self.content[product]
+            # if we are deleting the last item in the array, just delete the array itself
+            if repo and len(self.content[product]) > 1:
+                self.content[product].remove(repo)
+            else:
+                del self.content[product]
         except:
             pass
 
-    def findRepo(self, product):
+    def findRepos(self, product):
         return self.content.get(product)
 
     def create(self):
@@ -65,6 +72,11 @@ class ProductDatabase:
         f = open(self.__fn())
         try:
             d = json.load(f)
+            # check for old-style product db and convert if needed
+            for k in d:
+                if type(d[k]) == str or type(d[k]) == unicode:
+                    # convert string to array with string as element
+                    d[k] = [d[k]]
             self.content = d
         except:
             pass
@@ -195,28 +207,31 @@ class ProductManager:
         for cert in self.pdir.list():
             p = cert.products[0]
             prod_hash = p.id
-            repo = self.db.findRepo(prod_hash)
+            repos = self.db.findRepos(prod_hash)
 
-            # if we had errors with the repo or productid metadata
-            # we could be very confused here, so do not
-            # delete anything. see bz #736424
-            if repo in self.meta_data_errors:
-                log.info("%s has meta-data errors.  Not deleting product cert %s." % (repo, prod_hash))
-                continue
+            for repo in repos:
 
-            # FIXME: not entirely sure why we do this
-            #  to avoid a none on cert.delete surely
-            # but is there another reason?
-            if repo is None:
-                continue
-            if repo in active:
-                continue
+                # if we had errors with the repo or productid metadata
+                # we could be very confused here, so do not
+                # delete anything. see bz #736424
+                if repo in self.meta_data_errors:
+                    log.info("%s has meta-data errors.  Not deleting product cert %s." % (repo, prod_hash))
+                    continue
 
-            log.info("product cert %s for %s is being deleted" % (prod_hash, p.name))
-            cert.delete()
-            self.pdir.refresh()
+                # FIXME: not entirely sure why we do this
+                #  to avoid a none on cert.delete surely
+                # but is there another reason?
+                if repo is None:
+                    continue
+                if repo in active:
+                    continue
 
-            self.db.delete(prod_hash)
+                log.info("product cert %s for %s is being deleted" % (prod_hash, p.name))
+                cert.delete()
+                self.pdir.refresh()
+
+                self.db.delete(prod_hash, repo)
+
             self.db.write()
 
     # find the list of repo's that provide packages that
