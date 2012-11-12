@@ -14,6 +14,7 @@ class TestProductManager(unittest.TestCase):
                 product_db=self.prod_db_mock)
 
     def test_removed(self):
+        self.prod_db_mock.findRepos.return_value = ["repo1"]
         cert = self._create_desktop_cert()
         self.prod_dir.certs.append(cert)
         self.prod_mgr.updateRemoved([])
@@ -129,7 +130,7 @@ class TestProductManager(unittest.TestCase):
         self.assertEquals(type(prod_db.findRepos("10")), list)
 
     @patch("simplejson.load")
-    def test_add_to_db(self, load_mock):
+    def test_add_to_existing(self, load_mock):
         json_data = {}
         json_data["10"] = "foo"
         load_mock.return_value = json_data
@@ -137,6 +138,16 @@ class TestProductManager(unittest.TestCase):
         prod_db.read()
         prod_db.add("10", "bar")
         self.assertEquals(len(prod_db.findRepos("10")), 2)
+
+    @patch("simplejson.load")
+    def test_add_to_new(self, load_mock):
+        json_data = {}
+        json_data["10"] = "foo"
+        load_mock.return_value = json_data
+        prod_db = productid.ProductDatabase()
+        prod_db.read()
+        prod_db.add("11", "bar")
+        self.assertEquals(len(prod_db.findRepos("11")), 1)
 
     @patch("simplejson.load")
     def test_remove_entry(self, load_mock):

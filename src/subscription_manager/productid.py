@@ -46,7 +46,7 @@ class ProductDatabase:
         self.create()
 
     def add(self, product, repo):
-        if self.content[product]:
+        if product in self.content:
             self.content[product].append(repo)
         else:
             self.content[product] = [repo]
@@ -208,6 +208,10 @@ class ProductManager:
             p = cert.products[0]
             prod_hash = p.id
             repos = self.db.findRepos(prod_hash)
+
+            # XXX: cheesy
+            if not repos:
+                repos = []
 
             for repo in repos:
 
