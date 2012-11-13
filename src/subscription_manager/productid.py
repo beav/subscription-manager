@@ -230,11 +230,13 @@ class ProductManager:
                 if repo in active:
                     continue
 
-                log.info("product cert %s for %s is being deleted" % (prod_hash, p.name))
-                cert.delete()
-                self.pdir.refresh()
-
                 self.db.delete(prod_hash, repo)
+
+                # see if we deleted the last repo for that cert
+                if not self.db.findRepos(prod_hash):
+                    log.info("product cert %s for %s is being deleted" % (prod_hash, p.name))
+                    cert.delete()
+                    self.pdir.refresh()
 
             self.db.write()
 

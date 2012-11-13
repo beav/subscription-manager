@@ -14,7 +14,14 @@ class TestProductManager(unittest.TestCase):
                 product_db=self.prod_db_mock)
 
     def test_removed(self):
-        self.prod_db_mock.findRepos.return_value = ["repo1"]
+        self.firstcall = True
+        def _my_retval(*args):
+            if self.firstcall:
+                self.firstcall = False
+                return ["repo1"]
+            return []
+
+        self.prod_db_mock.findRepos.side_effect = _my_retval
         cert = self._create_desktop_cert()
         self.prod_dir.certs.append(cert)
         self.prod_mgr.updateRemoved([])
