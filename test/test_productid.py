@@ -10,6 +10,7 @@ class TestProductManager(unittest.TestCase):
     def setUp(self):
         self.prod_dir = stubs.StubProductDirectory([])
         self.prod_db_mock = Mock()
+        self.prod_db_mock.content.keys.return_value = []
         self.prod_mgr = productid.ProductManager(product_dir=self.prod_dir,
                 product_db=self.prod_db_mock)
 
@@ -27,6 +28,21 @@ class TestProductManager(unittest.TestCase):
         self.prod_dir.certs.append(cert)
         self.prod_mgr.updateRemoved([])
         self.assertTrue(cert.delete.called)
+
+    def test_product_cert_deleted(self):
+        self.prod_db_mock.content.keys.return_value = [100]
+        self.prod_mgr.updateRemoved([])
+        self.prod_db_mock.delete.assert_called_with(100)
+
+    def test_product_cert_not_deleted(self):
+        cert = stubs.StubProductCertificate(
+            stubs.StubProduct("100", "Awesome OS",
+                version="99", provided_tags="awesome-tags"))
+        self.prod_dir.certs.append(cert)
+        self.prod_db_mock.content.keys.return_value = ["100"]
+        self.prod_db_mock.findRepos.return_value = ['foo-100-repo']
+        self.prod_mgr.updateRemoved(['foo-100-repo'])
+        assert not self.prod_db_mock.delete.called, 'delete should not have been called'
 
     def _create_desktop_cert(self):
         cert = stubs.StubProductCertificate(

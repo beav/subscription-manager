@@ -19,6 +19,9 @@ sys.path.append("/usr/share/rhsm")
 from subscription_manager.productid import ProductDatabase
 from subscription_manager.certdirectory import ProductDirectory
 
+import gettext
+_ = gettext.gettext
+
 requires_api_version = '2.6'
 plugin_type = (TYPE_CORE,)
 

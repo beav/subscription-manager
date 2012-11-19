@@ -244,7 +244,13 @@ class ProductManager:
                     cert.delete()
                     self.pdir.refresh()
 
-            self.db.write()
+        # this is to fix the db if someone deletes their product certs by hand
+        for product_hash in self.db.content.keys():
+            if not self.pdir.findByProduct(product_hash):
+                log.info("product cert for %s not found, removing db entry" % product_hash)
+                self.db.delete(product_hash)
+
+        self.db.write()
 
     # find the list of repo's that provide packages that
     # are actually installed.

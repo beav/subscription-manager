@@ -280,6 +280,11 @@ class StubProductDirectory(StubCertificateDirectory, ProductDirectory):
     def __init__(self, certificates):
         StubCertificateDirectory.__init__(self, certificates)
 
+    def findByProduct(self, product_hash):
+        for c in self.certs:
+            if c.product.id == product_hash:
+                return c
+
 
 class StubConsumerIdentity:
     CONSUMER_NAME = "John Q Consumer"
