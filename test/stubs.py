@@ -41,6 +41,9 @@ productCertDir = /etc/pki/product
 entitlementCertDir = /etc/pki/entitlement
 consumerCertDir = /etc/pki/consumer
 
+[splice]
+rhic = /foo/bar/rhic.pem
+
 [rhsmcertd]
 certFrequency = 240
 """

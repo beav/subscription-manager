@@ -22,6 +22,7 @@ from yum.plugins import TYPE_CORE, TYPE_INTERACTIVE
 sys.path.append('/usr/share/rhsm')
 from subscription_manager import logutil
 from subscription_manager.repolib import RepoLib, EntitlementDirectory
+from subscription_manager.certlib import RhicCertificate
 from rhsm import connection
 
 requires_api_version = '2.5'
@@ -58,6 +59,12 @@ def update(conduit):
 
     cert_file = ConsumerIdentity.certpath()
     key_file = ConsumerIdentity.keypath()
+
+    # if we have a RHIC, it's ok to call RepoLib without a ConsumerId or UEP
+    if RhicCertificate.existsAndValid():
+        rl = RepoLib()
+        rl.update()
+        return
 
     try:
         ConsumerIdentity.read().getConsumerId()
@@ -123,7 +130,8 @@ def config_hook(conduit):
     logutil.init_logger_for_yum()
     try:
         update(conduit)
-        warnOrGiveUsageMessage(conduit)
-        warnExpired(conduit)
+        if not ClassicCheck().is_registered_with_classic() and not RhicCertificate.existsAndValid():
+                warnOrGiveUsageMessage(conduit)
+                warnExpired(conduit)
     except Exception, e:
         conduit.error(2, str(e))

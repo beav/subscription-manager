@@ -19,7 +19,12 @@ import unittest
 
 # TODO: move to python-rhsm test suite?
 
-from stubs import StubProduct, StubEntitlementCertificate
+from stubs import StubProduct, StubEntitlementCertificate, StubConfig
+
+from subscription_manager.certlib import RhicCertificate
+from rhsm import certificate
+import certdata
+import mock
 
 
 def yesterday():
@@ -66,3 +71,15 @@ class EntitlementCertificateTests(unittest.TestCase):
                 end_date=yesterday())
 
         self.assertFalse(cert.is_valid())
+
+
+class RhicCertificateTests(unittest.TestCase):
+
+    @mock.patch.object(RhicCertificate, 'exists')
+    @mock.patch.object(RhicCertificate, 'read')
+    def test_existsandvalid(self, mock_exists, mock_read):
+        mock_exists.return_value = True
+        mock_read.return_value = certificate.create_from_pem(certdata.RHIC_CERT)
+        testRhicCert = RhicCertificate()
+        testRhicCert.cfg = StubConfig()
+        self.assertTrue(testRhicCert.existsAndValid())

@@ -747,9 +747,33 @@ def parseDate(date):
     return dt
 
 
+def getRhicMachineId(facts_dict):
+    # this identifier is only used by the RCS. It is needed in the event that a
+    # machine checks in more than once within an hour, so we do not
+    # inadventently report overconsumption.
+
+    identifier = ""
+    if 'system.uuid' in facts_dict:
+        identifier = facts_dict['system.uuid']
+    elif 'virt.uuid' in facts_dict:
+        identifier = facts_dict['virt.uuid']
+    else:
+        log.warn("No system identfier found, relying on eth0 hw address")
+
+    if 'net.interface.eth0.mac_address' in facts_dict:
+        identifier += '-' + facts_dict['net.interface.eth0.mac_address']
+    else:
+        log.warn("No hw address found for eth0")
+
+    if not identifier:
+        raise Exception("Unable to create machine identifier")
+
+    return identifier
+
+
 def formatDate(dt):
     if dt:
-        return dt.astimezone(LocalTz()).strftime("%x")
+        return dt.astimezone(LocalTz()).strftime("%x %X")
     else:
         return ""
 

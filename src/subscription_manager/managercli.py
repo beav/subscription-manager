@@ -19,10 +19,13 @@ import os
 import sys
 import logging
 import socket
+import subprocess
 import getpass
 import dbus
 import datetime
 from time import strftime, strptime, localtime
+import urlparse
+import shutil
 from M2Crypto import X509
 from M2Crypto import SSL
 
@@ -35,7 +38,7 @@ import rhsm.config
 import rhsm.connection as connection
 
 from subscription_manager.branding import get_branding
-from subscription_manager.certlib import CertLib, ConsumerIdentity
+from subscription_manager.certlib import CertLib, ConsumerIdentity, RhicCertificate
 from subscription_manager.repolib import RepoLib, RepoFile
 from subscription_manager.certmgr import CertManager
 from subscription_manager.cert_sorter import CertSorter
@@ -58,6 +61,7 @@ cfg = rhsm.config.initConfig()
 
 NOT_REGISTERED = _("This system is not yet registered. Try 'subscription-manager register --help' for more information.")
 LIBRARY_ENV_NAME = "library"
+RHSMCERTD_WORKER = "/usr/libexec/rhsmcertd-worker"
 
 # Translates the cert sorter status constants:
 STATUS_MAP = {
@@ -863,6 +867,7 @@ class RegisterCommand(UserPassCommand):
                                help=_("name of the system to register, defaults to the hostname"))
         self.parser.add_option("--consumerid", dest="consumerid", metavar="SYSTEMID",
                                help=_("the existing system data is pulled from the server"))
+        self.parser.add_option("--rhic", dest="rhic", help=_("Register using a RHIC"))
         self.parser.add_option("--org", dest="org",
                                help=_("register to one of multiple organizations for the user"))
         self.parser.add_option("--environment", dest="environment",
@@ -947,6 +952,31 @@ class RegisterCommand(UserPassCommand):
                 except Exception, e:
                     log.error("Unable to unregister consumer: %s" % old_uuid)
                     log.exception(e)
+
+        # if we are registering with a RHIC, do that here
+        # TODO:  command-line config overrides
+        if self.options.rhic:
+            retcode = 1
+            # ensure new rhic is readable
+            if os.access(self.options.rhic, os.R_OK):
+                rhic_location = RhicCertificate.certpath()
+                if RhicCertificate.exists():
+                    log.info("removing existing rhic at %s" % rhic_location)
+                    os.unlink(rhic_location)
+                log.info("copying %s into %s" % (self.options.rhic, rhic_location))
+                shutil.copy(self.options.rhic, rhic_location)
+                print(_("RHIC %s successfully imported") % self.options.rhic)
+                try:
+                    retcode = subprocess.call([RHSMCERTD_WORKER])
+                except:
+                    print "Exception when calling rhsmcertd-worker. See /var/log/rhsm/rhsm.log for more detail."
+                    log.exception(e)
+                if retcode != 0:
+                    log.info("Non-zero return code from rhsmcertd-worker. See /var/log/rhsm/rhsm.log for more detail.")
+            else:
+                print(_("RHIC location %s is not readable") % self.options.rhic)
+
+            sys.exit(retcode)
 
         # Proceed with new registration:
         try:
@@ -1856,6 +1886,9 @@ class ListCommand(CliCommand):
                           prod_dir=self.product_dir)
 
     def _validate_options(self):
+        if (self.options.available and RhicCertificate.existsAndValid()):
+            print _("Error: --available is not applicable when using a RHIC. Please consult the RHIC generation application to view and alter available products for this RHIC.")
+            sys.exit(-1)
         if (self.options.all and not self.options.available):
             print _("Error: --all is only applicable with --available")
             sys.exit(-1)
@@ -1988,6 +2021,7 @@ class ListCommand(CliCommand):
 
         columns = get_terminal_width()
         for cert in certs:
+            # this needs to print differently for RHICs..
             order = cert.order
             order_name = self._format_name(order.name, 24, columns)
             print(self._none_wrap(_("Subscription Name:    \t%s"),
@@ -2001,22 +2035,22 @@ class ListCommand(CliCommand):
             if len(cert.products) == 0:
                 print(prefix % "")
 
-            print(self._none_wrap(_("SKU:                  \t%s"),
-                  order.sku))
-            print(self._none_wrap(_("Contract:             \t%s"),
-                  order.contract))
-            print(self._none_wrap(_("Account:              \t%s"),
-                  order.account))
+            #print(self._none_wrap(_("SKU:                  \t%s"),
+            #      order.sku))
+            #print(self._none_wrap(_("Contract:             \t%s"),
+            #      order.contract))
+            #print(self._none_wrap(_("Account:              \t%s"),
+            #      order.account))
             print(self._none_wrap(_("Serial Number:        \t%s"),
                   cert.serial))
             print(self._none_wrap(_("Active:               \t%s"),
                   cert.is_valid()))
-            print(self._none_wrap(_("Quantity Used:        \t%s"),
-                  order.quantity_used))
-            print(_("Service Level:        \t%s") %
-                  (order.service_level or ""))
-            print(_("Service Type:         \t%s") %
-                  (order.service_type or ""))
+            #print(self._none_wrap(_("Quantity Used:        \t%s"),
+            #      order.quantity_used))
+            #print(_("Service Level:        \t%s") %
+            #      (order.service_level or ""))
+            #print(_("Service Type:         \t%s") %
+            #      (order.service_type or ""))
             print(_("Starts:               \t%s") %
                   managerlib.formatDate(cert.valid_range.begin()))
             print(_("Ends:                 \t%s") %

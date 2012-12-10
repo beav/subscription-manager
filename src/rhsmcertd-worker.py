@@ -20,18 +20,64 @@ sys.path.append("/usr/share/rhsm")
 import logging
 
 from rhsm import connection
+from rhsm import certificate
 from subscription_manager import certmgr
 from subscription_manager import logutil
 from subscription_manager import managerlib
-from subscription_manager.certlib import ConsumerIdentity
+from subscription_manager.certlib import ConsumerIdentity, RhicCertificate
 from subscription_manager.i18n_optparse import OptionParser, \
     WrappedIndentedHelpFormatter, USAGE
+from subscription_manager import rhiclib
+from subscription_manager.facts import Facts
+from subscription_manager.certdirectory import EntitlementDirectory, ProductDirectory, Writer
 
 import gettext
 _ = gettext.gettext
 
 
 def main(options, log):
+
+    if RhicCertificate.existsAndValid():
+        facts = Facts(ent_dir=EntitlementDirectory(),
+                              prod_dir=ProductDirectory())
+        iproducts = managerlib.getInstalledProductStatus(ProductDirectory(),
+                EntitlementDirectory(), facts.get_facts())
+
+        product_certs = []
+        for product in iproducts:
+            product_certs.append(product[1])
+
+        certs = []
+        try:
+            certs = rhiclib.getCerts(facts.to_dict(), product_certs)
+        except connection.NetworkException, e:
+            if e.code == 410:
+                print _("RHIC was deleted by upstream server. See rhsm.log for more detail.")
+                RhicCertificate.move()
+                sys.exit(-1)
+            else:
+                raise
+        except connection.RemoteServerException, e:
+            if e.code == 404:
+                print _("RHIC was not found by upstream server. See rhsm.log for more detail.")
+                RhicCertificate.move()
+                sys.exit(-1)
+            else:
+                raise
+
+        if certs:
+            try:
+                writer = Writer()
+                cert = certificate.create_from_pem(certs['cert'])
+                key = certificate.Key(certs['key'])
+                writer.write(key, cert)
+            except:
+                raise
+
+        rhiclib.cleanExpiredCerts(ProductDirectory(), EntitlementDirectory(), facts.to_dict())
+
+        sys.exit(0)
+
     if not ConsumerIdentity.existsAndValid():
         log.error('Either the consumer is not registered or the certificates' +
                   ' are corrupted. Certificate update using daemon failed.')
